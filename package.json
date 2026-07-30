@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vercel dev",
     "dev:node": "node server.js",
-    "dev:static": "live-server --port=8095 --entry-file=index.html --no-browser"
+    "dev:static": "live-server --port=8095 --entry-file=index.html --no-browser",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
-  "dependencies": {
-    "@google/generative-ai": "^0.24.1"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "vercel": "^58.1.0"
+    "vercel": "^58.1.0",
+    "vitest": "^4.1.10"
   }
 }

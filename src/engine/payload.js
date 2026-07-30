@@ -102,61 +102,39 @@ export function createSystemPrompt(character) {
   return character.system;
 }
 
-export function buildPayload(character, messages, provider = "gemini") {
-  if (provider === "openrouter") {
-    const contents = [
-      {
-        role: "system",
-        content: createSystemPrompt(character),
-      },
-      ...messages.map((msg) => ({
-        role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content,
-      })),
-    ];
-
-    return {
-      messages: contents,
-      temperature: character.temperature,
-      max_tokens: 150,
-    };
+export function buildPayload(character, messages, provider = "openrouter") {
+  if (provider !== "openrouter") {
+    throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const contents = messages.map((msg) => ({
-    role: msg.role === "assistant" ? "model" : "user",
-    parts: [{ text: msg.content }],
-  }));
- 
+  const contents = [
+    {
+      role: "system",
+      content: createSystemPrompt(character),
+    },
+    ...messages.map((msg) => ({
+      role: msg.role === "assistant" ? "assistant" : "user",
+      content: msg.content,
+    })),
+  ];
+
   return {
-    system_instruction: {
-      parts: [{ text: createSystemPrompt(character) }],
-    },
-    contents,
-    generationConfig: {
-      temperature: character.temperature,
-      maxOutputTokens: 150,
-    },
+    messages: contents,
+    temperature: character.temperature,
+    max_tokens: 150,
   };
 }
 
-export function isValidPayload(payload, provider = "gemini") {
-  if (provider === "openrouter") {
-    if (!Array.isArray(payload?.messages) || payload.messages.length === 0) return false;
-
-    return payload.messages.every((entry) => {
-      const hasValidRole =
-        entry?.role === "system" || entry?.role === "user" || entry?.role === "assistant";
-      return hasValidRole && typeof entry?.content === "string";
-    });
+export function isValidPayload(payload, provider = "openrouter") {
+  if (provider !== "openrouter") {
+    return false;
   }
 
-  if (typeof payload?.system_instruction?.parts?.[0]?.text !== "string") return false;
-  if (!Array.isArray(payload?.contents)) return false;
- 
-  return payload.contents.every((entry) => {
-    const hasValidRole = entry?.role === "user" || entry?.role === "model";
-    const hasTextPart =
-      Array.isArray(entry?.parts) && typeof entry.parts[0]?.text === "string";
-    return hasValidRole && hasTextPart;
+  if (!Array.isArray(payload?.messages) || payload.messages.length === 0) return false;
+
+  return payload.messages.every((entry) => {
+    const hasValidRole =
+      entry?.role === "system" || entry?.role === "user" || entry?.role === "assistant";
+    return hasValidRole && typeof entry?.content === "string";
   });
 }

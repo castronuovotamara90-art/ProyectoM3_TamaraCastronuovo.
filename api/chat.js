@@ -1,14 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 import { fetchJson } from "../src/engine/fetchjson.js";
 import { buildPayload, getCharacter, isValidPayload } from "../src/engine/payload.js";
 import { extractUsage, normalizeAIResponse } from "../src/engine/normalizer.js";
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-3.5-turbo";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-1.5-flash";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -18,11 +10,10 @@ export default async function handler(req, res) {
     });
   }
 
-  const provider = resolveProvider(process.env.AI_PROVIDER);
-  if (!provider) {
+  if (!getOpenRouterApiKey()) {
     return sendJson(res, 500, {
       error: "MISSING_API_KEY",
-      message: "Set GEMINI_API_KEY and optional OPENROUTER_API_KEY in .env",
+      message: "Set OPENROUTER_API_KEY in .env",
     });
   }
 
@@ -41,18 +32,18 @@ export default async function handler(req, res) {
 
     const character = getCharacter(characterId);
     const messages = [...history, { role: "user", content: message }];
-    const payload = buildPayload(character, messages, provider.name);
+    const payload = buildPayload(character, messages, "openrouter");
 
-    if (!isValidPayload(payload, provider.name)) {
+    if (!isValidPayload(payload, "openrouter")) {
       return sendJson(res, 400, {
         error: "INVALID_PAYLOAD",
-        message: `Payload validation failed for provider: ${provider.name}`,
+        message: "Payload validation failed",
       });
     }
 
-    const providerResult = await requestWithProvider(payload, provider.name);
-    const normalized = normalizeAIResponse(providerResult.raw, providerResult.providerName);
-    const usage = extractUsage(providerResult.raw, providerResult.providerName);
+    const providerResult = await requestOpenRouter(payload);
+    const normalized = normalizeAIResponse(providerResult.raw, "openrouter");
+    const usage = extractUsage(providerResult.raw, "openrouter");
 
     if (!normalized.text) {
       return sendJson(res, 502, {
@@ -86,74 +77,23 @@ export default async function handler(req, res) {
   }
 }
 
-async function requestWithProvider(payload, providerName) {
-  if (providerName === "gemini") {
-    try {
-      return await requestGeminiWithFallback(payload);
-    } catch (error) {
-      if (!OPENROUTER_API_KEY || !isRecoverableProviderError(error)) {
-        throw error;
-      }
-
-      const openRouterPayload = convertToOpenRouterPayload(payload);
-      return requestOpenRouter(openRouterPayload);
-    }
-  }
-
-  if (providerName === "openrouter") {
-    return requestOpenRouter(payload);
-  }
-
-  throw new Error(`Unsupported provider: ${providerName}`);
-}
-
-async function requestGeminiWithFallback(payload) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("Missing GEMINI_API_KEY");
-  }
-
-  const models = Array.from(new Set([GEMINI_MODEL, GEMINI_FALLBACK_MODEL].filter(Boolean)));
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  let lastError;
-
-  for (const modelName of models) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(payload);
-      const response = await result.response;
-
-      return {
-        raw: response,
-        model: modelName,
-        providerName: "gemini",
-      };
-    } catch (error) {
-      lastError = error;
-      if (!shouldRetryWithNextGeminiModel(error)) {
-        throw error;
-      }
-    }
-  }
-
-  throw lastError || new Error("Gemini request failed for all configured models");
-}
-
 async function requestOpenRouter(payload) {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error("Missing OPENROUTER_API_KEY for fallback");
+  const apiKey = getOpenRouterApiKey();
+  if (!apiKey) {
+    throw new Error("Missing OPENROUTER_API_KEY");
   }
 
   const endpoint = "https://openrouter.ai/api/v1/chat/completions";
   const requestPayload = {
     ...payload,
-    model: OPENROUTER_MODEL,
+    model: getOpenRouterModel(),
   };
 
   const raw = await fetchJson(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "http://localhost:3000",
       "X-Title": process.env.OPENROUTER_X_TITLE || "SPA Simpsons Chat",
     },
@@ -162,32 +102,7 @@ async function requestOpenRouter(payload) {
 
   return {
     raw,
-    model: OPENROUTER_MODEL,
-    providerName: "openrouter",
-  };
-}
-
-function convertToOpenRouterPayload(geminiPayload) {
-  const systemPrompt = geminiPayload?.system_instruction?.parts?.[0]?.text || "";
-  const contents = Array.isArray(geminiPayload?.contents) ? geminiPayload.contents : [];
-
-  const messages = [];
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-
-  for (const item of contents) {
-    const role = item?.role === "model" ? "assistant" : "user";
-    const text = item?.parts?.[0]?.text;
-    if (typeof text === "string" && text.trim()) {
-      messages.push({ role, content: text });
-    }
-  }
-
-  return {
-    messages,
-    temperature: geminiPayload?.generationConfig?.temperature ?? 0.6,
-    max_tokens: geminiPayload?.generationConfig?.maxOutputTokens ?? 150,
+    model: getOpenRouterModel(),
   };
 }
 
@@ -214,47 +129,12 @@ function sanitizeHistory(history) {
     .slice(-12);
 }
 
-function resolveProvider(preferredProvider) {
-  const preferred = String(preferredProvider || "").toLowerCase().trim();
-
-  if (preferred === "gemini") {
-    if (GEMINI_API_KEY) return { name: "gemini" };
-    if (OPENROUTER_API_KEY) return { name: "openrouter" };
-    return null;
-  }
-
-  if (preferred === "openrouter") {
-    if (OPENROUTER_API_KEY) return { name: "openrouter" };
-    if (GEMINI_API_KEY) return { name: "gemini" };
-    return null;
-  }
-
-  if (GEMINI_API_KEY) return { name: "gemini" };
-  if (OPENROUTER_API_KEY) return { name: "openrouter" };
-  return null;
+function getOpenRouterApiKey() {
+  return process.env.OPENROUTER_API_KEY;
 }
 
-function shouldRetryWithNextGeminiModel(error) {
-  const text = String(error?.message || "").toLowerCase();
-  return (
-    text.includes("no longer available") ||
-    text.includes("not found for api version") ||
-    text.includes("is not found") ||
-    text.includes("unsupported model")
-  );
-}
-
-function isRecoverableProviderError(error) {
-  const text = String(error?.message || "").toLowerCase();
-  return (
-    error?.status === 429 ||
-    text.includes("quota") ||
-    text.includes("rate") ||
-    text.includes("resource exhausted") ||
-    text.includes("no longer available") ||
-    text.includes("not found") ||
-    text.includes("unsupported model")
-  );
+function getOpenRouterModel() {
+  return process.env.OPENROUTER_MODEL || "openai/gpt-3.5-turbo";
 }
 
 function sendJson(res, statusCode, data) {

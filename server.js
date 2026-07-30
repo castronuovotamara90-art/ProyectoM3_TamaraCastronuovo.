@@ -20,10 +20,6 @@ const loadedEnvPath = loadFirstExistingEnv([
 const PORT = Number(process.env.PORT || 8095);
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-1.5-pro";
-const AI_PROVIDER = resolveProvider(process.env.AI_PROVIDER);
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -82,11 +78,10 @@ async function handleChatRequest(req, res) {
     return;
   }
 
-  if (!AI_PROVIDER) {
+  if (!OPENROUTER_API_KEY) {
     sendJson(res, 500, {
       error: "MISSING_API_KEY",
-      message:
-        "Missing provider configuration. Set OPENROUTER_API_KEY (recommended) or GEMINI_API_KEY in .env and restart the server.",
+      message: "Missing provider configuration. Set OPENROUTER_API_KEY in .env and restart the server.",
     });
     return;
   }
@@ -106,12 +101,12 @@ async function handleChatRequest(req, res) {
 
   const character = getCharacter(characterId);
   const messages = [...history, { role: "user", content: message }];
-  const payload = buildPayload(character, messages, AI_PROVIDER.name);
+  const payload = buildPayload(character, messages, "openrouter");
 
-  if (!isValidPayload(payload, AI_PROVIDER.name)) {
+  if (!isValidPayload(payload, "openrouter")) {
     sendJson(res, 400, {
       error: "INVALID_PAYLOAD",
-      message: `Payload validation failed for provider: ${AI_PROVIDER.name}`,
+      message: "Payload validation failed for provider: openrouter",
     });
     return;
   }
@@ -119,7 +114,7 @@ async function handleChatRequest(req, res) {
   let providerResult;
 
   try {
-    providerResult = await requestWithProvider(payload, AI_PROVIDER.name);
+    providerResult = await requestOpenRouter(payload);
   } catch (error) {
     if (error?.status === 429) {
       sendJson(res, 429, {
@@ -140,8 +135,8 @@ async function handleChatRequest(req, res) {
     return;
   }
 
-  const normalized = normalizeAIResponse(providerResult.raw, AI_PROVIDER.name);
-  const usage = extractUsage(providerResult.raw, AI_PROVIDER.name);
+  const normalized = normalizeAIResponse(providerResult.raw, "openrouter");
+  const usage = extractUsage(providerResult.raw, "openrouter");
 
   if (!normalized.text) {
     sendJson(res, 502, {
@@ -282,35 +277,6 @@ function loadFirstExistingEnv(candidates) {
   return null;
 }
 
-async function requestGeminiWithFallback(payload) {
-  const models = Array.from(new Set([GEMINI_MODEL, GEMINI_FALLBACK_MODEL].filter(Boolean)));
-  let lastError;
-
-  for (const model of models) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-    try {
-      const raw = await fetchJson(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      return { raw, model };
-    } catch (error) {
-      lastError = error;
-      if (!shouldRetryWithNextModel(error)) {
-        throw error;
-      }
-    }
-  }
-
-  throw lastError ?? new Error("Gemini request failed for all configured models");
-}
-
 async function requestOpenRouter(payload) {
   const endpoint = "https://openrouter.ai/api/v1/chat/completions";
   const requestPayload = {
@@ -330,45 +296,4 @@ async function requestOpenRouter(payload) {
   });
 
   return { raw, model: OPENROUTER_MODEL };
-}
-
-async function requestWithProvider(payload, providerName) {
-  if (providerName === "openrouter") {
-    return requestOpenRouter(payload);
-  }
-
-  if (providerName === "gemini") {
-    return requestGeminiWithFallback(payload);
-  }
-
-  throw new Error(`Unsupported provider: ${providerName}`);
-}
-
-function resolveProvider(preferredProvider) {
-  const preferred = String(preferredProvider ?? "").toLowerCase().trim();
-
-  if (preferred === "openrouter") {
-    return OPENROUTER_API_KEY
-      ? { name: "openrouter" }
-      : null;
-  }
-
-  if (preferred === "gemini") {
-    return GEMINI_API_KEY
-      ? { name: "gemini" }
-      : null;
-  }
-
-  if (OPENROUTER_API_KEY) return { name: "openrouter" };
-  if (GEMINI_API_KEY) return { name: "gemini" };
-  return null;
-}
-
-function shouldRetryWithNextModel(error) {
-  const text = String(error?.message ?? "").toLowerCase();
-  return (
-    text.includes("no longer available") ||
-    text.includes("not found for api version") ||
-    text.includes("is not found")
-  );
 }
