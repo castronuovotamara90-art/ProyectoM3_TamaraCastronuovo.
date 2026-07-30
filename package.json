@@ -1,0 +1,17 @@
+{
+  "name": "starter-spa-demo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "dev:node": "node server.js",
+    "dev:static": "live-server --port=8095 --entry-file=index.html --no-browser"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "vercel": "^58.1.0"
+  }
+}
