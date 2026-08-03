@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vercel dev",
-    "dev:node": "node server.js",
+    "dev": "PORT=3000 node server.js",
+    "dev:vercel": "vercel dev",
+    "dev:node": "PORT=3000 node server.js",
     "dev:static": "live-server --port=8095 --entry-file=index.html --no-browser",
     "test": "vitest",
     "test:run": "vitest run"

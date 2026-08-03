@@ -126,6 +126,16 @@ async function handleChatRequest(req, res) {
       return;
     }
 
+    if (error?.status === 504) {
+      sendJson(res, 504, {
+        error: "AI_REQUEST_TIMEOUT",
+        message:
+          error?.message ??
+          "The AI provider took too long to respond. Retry later or check the network.",
+      });
+      return;
+    }
+
     sendJson(res, 502, {
       error: "AI_REQUEST_FAILED",
       message:
@@ -238,8 +248,7 @@ function sanitizeHistory(history) {
       role: msg.role,
       content: typeof msg.content === "string" ? msg.content.slice(0, 600) : "",
     }))
-    .filter((msg) => msg.content)
-    .slice(-12);
+    .filter((msg) => msg.content);
 }
 
 function sendJson(res, statusCode, data) {

@@ -69,7 +69,6 @@ function wireForm(form, input) {
 
       state.history.push({ role: "user", content: text });
       state.history.push({ role: "assistant", content: result.text });
-      state.history = state.history.slice(-12);
 
       renderAssistantMessage(result.text);
       setStatus(result.truncated ? "Respuesta truncada" : "Listo");
