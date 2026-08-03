@@ -42,6 +42,14 @@ Abre esta URL en el navegador:
 http://localhost:3000
 ```
 
+### Deploy en Vercel
+
+La versión desplegada está disponible en:
+
+```text
+https://proyecto-m3-tamara-castronuovo.vercel.app/home
+```
+
 ## Scripts útiles
 
 - `npm run dev`: inicia el servidor local en el puerto 3000.
