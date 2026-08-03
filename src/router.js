@@ -46,9 +46,12 @@ export function router() {
  * pushState NUNCA dispara popstate, por eso llamamos router() nosotros.
  */
 export function navigateTo(path) {
-  if (window.location.pathname === path) return;
+  const nextPath = normalizePath(path);
+  const currentPath = normalizePath(window.location.pathname);
 
-  history.pushState(null, "", path);
+  if (currentPath === nextPath) return;
+
+  history.pushState(null, "", nextPath);
   router();
 }
 
@@ -97,6 +100,11 @@ function emitRouteChange(path) {
 function normalizePath(path) {
   if (path === "/") return "/";
 
-  const normalized = path.replace(/\/+$/, "");
-  return normalized || "/";
+  const normalized = path
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => segment.toLowerCase())
+    .join("/");
+
+  return normalized ? `/${normalized}` : "/";
 }
