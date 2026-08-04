@@ -102,39 +102,43 @@ export function createSystemPrompt(character) {
   return character.system;
 }
 
-export function buildPayload(character, messages, provider = "openrouter") {
-  if (provider !== "openrouter") {
+export function buildPayload(character, messages, provider = "gemini") {
+  if (provider !== "gemini") {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const contents = [
-    {
-      role: "system",
-      content: createSystemPrompt(character),
-    },
-    ...messages.map((msg) => ({
-      role: msg.role === "assistant" ? "assistant" : "user",
-      content: msg.content,
-    })),
-  ];
+  const history = messages.map((msg) => ({
+    role: msg.role === "assistant" ? "model" : "user",
+    parts: [{ text: msg.content }],
+  }));
 
   return {
-    messages: contents,
-    temperature: character.temperature,
-    max_tokens: 150,
+    systemInstruction: createSystemPrompt(character),
+    generationConfig: {
+      temperature: character.temperature,
+      maxOutputTokens: 150,
+    },
+    history,
   };
 }
 
-export function isValidPayload(payload, provider = "openrouter") {
-  if (provider !== "openrouter") {
+export function isValidPayload(payload, provider = "gemini") {
+  if (provider !== "gemini") {
     return false;
   }
 
-  if (!Array.isArray(payload?.messages) || payload.messages.length === 0) return false;
+  if (typeof payload?.systemInstruction !== "string") return false;
+  if (!payload?.generationConfig || typeof payload.generationConfig !== "object") return false;
+  if (!Array.isArray(payload?.history)) return false;
 
-  return payload.messages.every((entry) => {
-    const hasValidRole =
-      entry?.role === "system" || entry?.role === "user" || entry?.role === "assistant";
-    return hasValidRole && typeof entry?.content === "string";
+  return payload.history.every((entry) => {
+    const hasValidRole = entry?.role === "user" || entry?.role === "model";
+    const parts = entry?.parts;
+
+    return (
+      hasValidRole &&
+      Array.isArray(parts) &&
+      parts.every((part) => typeof part?.text === "string")
+    );
   });
 }

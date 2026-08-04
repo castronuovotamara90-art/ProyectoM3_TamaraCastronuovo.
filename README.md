@@ -1,6 +1,6 @@
 # SPA Simpsons Chat
 
-Aplicación en vanilla JavaScript con tres vistas: Home, Chat y About. El chat usa un servidor local en Node.js para enviar mensajes a OpenRouter y devolver respuestas con personalidad de los personajes de The Simpsons.
+Aplicación en vanilla JavaScript con tres vistas: Home, Chat y About. El chat usa una serverless function en Vercel para enviar mensajes a Gemini y devolver respuestas con personalidad de los personajes de The Simpsons.
 
 ## Inicio rápido
 
@@ -20,15 +20,15 @@ npm install
 Crea un archivo `.env` en la raíz del proyecto usando `.env.example` como base.
 
 ```bash
-AI_PROVIDER=openrouter
-OPENROUTER_API_KEY=tu_api_key_de_openrouter
-OPENROUTER_MODEL=openai/gpt-3.5-turbo
+AI_PROVIDER=gemini
+GEMINI_API_KEY=tu_api_key_de_gemini
+GEMINI_MODEL=gemini-3.1-flash-lite
 PORT=3000
 ```
 
 > No subas tu archivo `.env` a Git.
 
-Si tenías una key expuesta previamente, rota la credencial en OpenRouter y usa una nueva.
+Si tenías una key expuesta previamente, rota la credencial en Gemini y usa una nueva.
 
 ### 4. Ejecutar la app
 
@@ -52,13 +52,13 @@ https://proyecto-m3-tamara-castronuovo.vercel.app/home
 
 ## Scripts útiles
 
-- `npm run dev`: inicia el servidor local en el puerto 3000.
+- `npm run dev`: inicia Vercel Dev en local.
 - `npm run dev:vercel`: usa Vercel Dev si quieres probar el runtime de Vercel.
 - `npm run test`: corre la suite de pruebas.
 
 ## Estructura del proyecto
 
-- `server.js`: servidor HTTP local que sirve la app y expone `/api/chat`.
+- `server.js`: servidor HTTP local legacy.
 - `src/main.js`: arranque de la SPA.
 - `src/router.js`: enrutado entre vistas.
 - `src/views/`: componentes de UI para Home, Chat y About.
@@ -73,7 +73,7 @@ https://proyecto-m3-tamara-castronuovo.vercel.app/home
    - `characterId`
    - `message`
    - `history`
-3. El backend arma el payload para OpenRouter, lo envía y devuelve una respuesta normalizada.
+3. El backend arma el prompt y envía la request a Gemini.
 4. En cada request se envía todo el historial disponible en memoria de la sesión.
 5. El frontend muestra el texto del personaje en la ventana del chat.
 
@@ -91,9 +91,9 @@ Deberías recibir JSON con un campo `text`.
 
 ## Problemas comunes
 
-- `MISSING_API_KEY`: falta `OPENROUTER_API_KEY` en el `.env`.
+- `MISSING_API_KEY`: falta `GEMINI_API_KEY` en el `.env`.
 - `AI_REQUEST_FAILED`: la key es inválida, el modelo no está disponible o el proveedor falló.
-- `AI_QUOTA_EXCEEDED` (429): revisa la cuota o el rate limit de OpenRouter.
+- `AI_QUOTA_EXCEEDED` (429): revisa la cuota o el rate limit de Gemini.
 - `AI_REQUEST_TIMEOUT` (504): el proveedor tardó demasiado en responder; intenta nuevamente.
 
 ## Registro de uso de IA
@@ -134,7 +134,7 @@ Bitácora real de asistencia con IA durante el desarrollo.
 Marca cada punto cuando lo verifiques:
 
 - [ ] Repositorio conectado a Vercel.
-- [ ] Variables de entorno cargadas en Vercel (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `PORT` si aplica).
+- [ ] Variables de entorno cargadas en Vercel (`GEMINI_API_KEY`, `GEMINI_MODEL`, `AI_PROVIDER`, `PORT` si aplica).
 - [ ] Deploy en estado `Ready`.
 - [ ] Ruta principal accesible (`/home`, `/chat`, `/about`).
 - [ ] Endpoint `POST /api/chat` responde correctamente en producción.
