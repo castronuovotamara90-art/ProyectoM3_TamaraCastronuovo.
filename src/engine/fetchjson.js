@@ -34,7 +34,7 @@ export async function fetchJson(url, options = {}) {
     ]); // 1er await
 
     if (!response.ok) {
-      // Gemini (y la mayoria de APIs REST) devuelven el detalle del error en el
+      // OpenRouter (y la mayoria de APIs REST) devuelven el detalle del error en el
       // body como { error: { code, message, status } }. Intentamos leerlo para
       // dar un mensaje util; si el body no es JSON, usamos el mensaje generico.
       let message = `HTTP ${response.status}: ${response.statusText}`;

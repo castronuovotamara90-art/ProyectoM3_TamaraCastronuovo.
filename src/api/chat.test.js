@@ -1,37 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { mockSendMessage, mockStartChat, mockGetGenerativeModel } = vi.hoisted(() => {
-  const mockSendMessage = vi.fn();
-  const mockStartChat = vi.fn(() => ({ sendMessage: mockSendMessage }));
-  const mockGetGenerativeModel = vi.fn(() => ({ startChat: mockStartChat }));
+const { mockFetchJson } = vi.hoisted(() => ({
+  mockFetchJson: vi.fn(),
+}));
 
-  return { mockSendMessage, mockStartChat, mockGetGenerativeModel };
-});
-
-vi.mock("@google/generative-ai", () => ({
-  GoogleGenerativeAI: class {
-    constructor(apiKey) {
-      this.apiKey = apiKey;
-    }
-
-    getGenerativeModel() {
-      return mockGetGenerativeModel();
-    }
-  },
+vi.mock("../engine/fetchjson.js", () => ({
+  fetchJson: mockFetchJson,
 }));
 
 import handler from "./chat.js";
 
 describe("chat handler", () => {
   beforeEach(() => {
-    process.env.GEMINI_API_KEY = "test-key";
-    process.env.GEMINI_MODEL = "gemini-3.1-flash-lite";
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GEMINI_MODEL;
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_MODEL;
   });
 
   it("devuelve 405 para metodos no POST", async () => {
@@ -49,8 +37,8 @@ describe("chat handler", () => {
     );
   });
 
-  it("devuelve 500 si falta GEMINI_API_KEY", async () => {
-    delete process.env.GEMINI_API_KEY;
+  it("devuelve 500 si falta OPENROUTER_API_KEY", async () => {
+    delete process.env.OPENROUTER_API_KEY;
 
     const req = { method: "POST", body: { message: "Hola" } };
     const res = {
@@ -66,13 +54,10 @@ describe("chat handler", () => {
     );
   });
 
-  it("devuelve 200 y respuesta normal cuando Gemini responde", async () => {
-    mockSendMessage.mockResolvedValue({
-      response: {
-        text: () => "Hola desde Gemini",
-        candidates: [{ finishReason: "STOP" }],
-        usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 4 },
-      },
+  it("devuelve 200 y respuesta normal cuando OpenRouter responde", async () => {
+    mockFetchJson.mockResolvedValue({
+      choices: [{ message: { content: "Hola desde OpenRouter" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 5, completion_tokens: 4 },
     });
 
     const req = { method: "POST", body: { message: "Hola", characterId: "homer", history: [] } };
@@ -86,7 +71,7 @@ describe("chat handler", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: "Hola desde Gemini",
+        text: "Hola desde OpenRouter",
         truncated: false,
         usage: { inputTokens: 5, outputTokens: 4 },
       })

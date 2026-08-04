@@ -4,15 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "PORT=3000 node server.js",
     "dev:vercel": "vercel dev",
     "dev:node": "PORT=3000 node server.js",
     "dev:static": "live-server --port=8095 --entry-file=index.html --no-browser",
+    "health:local": "curl -sS -X POST 'http://localhost:3000/api/chat' -H 'Content-Type: application/json' -d '{\"characterId\":\"homer\",\"message\":\"Hola\",\"history\":[]}'",
+    "health:prod": "curl -sS -X POST 'https://proyecto-m3-tamara-castronuovo.vercel.app/api/chat' -H 'Content-Type: application/json' -d '{\"characterId\":\"homer\",\"message\":\"Hola\",\"history\":[]}'",
     "test": "vitest",
     "test:run": "vitest run"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.21.0"
   },
   "devDependencies": {
     "vercel": "^58.1.0",

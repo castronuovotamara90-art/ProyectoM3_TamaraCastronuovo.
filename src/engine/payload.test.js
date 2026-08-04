@@ -20,46 +20,44 @@ describe('listCharacters', () => {
 });
 
 describe('buildPayload', () => {
-  it('construye un payload para Gemini con history', () => {
+  it('construye un payload para OpenRouter con history', () => {
     const character = getCharacter('lisa');
     const messages = [{ role: 'assistant', content: 'Hola' }];
 
-    const payload = buildPayload(character, messages, 'gemini');
+    const payload = buildPayload(character, messages, 'openrouter');
 
-    expect(payload.systemInstruction).toBe(character.system);
-    expect(payload.generationConfig).toMatchObject({
-      temperature: character.temperature,
-      maxOutputTokens: 150,
-    });
-    expect(payload.history[0]).toMatchObject({ role: 'model', parts: [{ text: 'Hola' }] });
+    expect(payload.temperature).toBe(character.temperature);
+    expect(payload.max_tokens).toBe(150);
+    expect(payload.messages[0]).toMatchObject({ role: 'system', content: character.system });
+    expect(payload.messages[1]).toMatchObject({ role: 'assistant', content: 'Hola' });
   });
 
-  it('lanza error si el provider no es gemini', () => {
+  it('lanza error si el provider no es openrouter', () => {
     const character = getCharacter('homer');
     const messages = [{ role: 'user', content: 'Hola' }];
 
-    expect(() => buildPayload(character, messages, 'openrouter')).toThrow('Unsupported provider');
+    expect(() => buildPayload(character, messages, 'gemini')).toThrow('Unsupported provider');
   });
 });
 
 describe('isValidPayload', () => {
-  it('valida un payload Gemini correcto', () => {
+  it('valida un payload OpenRouter correcto', () => {
     const payload = {
-      systemInstruction: 'prompt',
-      generationConfig: { temperature: 0.6, maxOutputTokens: 150 },
-      history: [{ role: 'user', parts: [{ text: 'Hola' }] }],
+      temperature: 0.6,
+      max_tokens: 150,
+      messages: [{ role: 'user', content: 'Hola' }],
     };
 
-    expect(isValidPayload(payload, 'gemini')).toBe(true);
+    expect(isValidPayload(payload, 'openrouter')).toBe(true);
   });
 
-  it('rechaza payload cuando el provider no es gemini', () => {
+  it('rechaza payload cuando el provider no es openrouter', () => {
     const payload = {
-      systemInstruction: 'prompt',
-      generationConfig: { temperature: 0.6, maxOutputTokens: 150 },
-      history: [{ role: 'user', parts: [{ text: 'Hola' }] }],
+      temperature: 0.6,
+      max_tokens: 150,
+      messages: [{ role: 'user', content: 'Hola' }],
     };
 
-    expect(isValidPayload(payload, 'openrouter')).toBe(false);
+    expect(isValidPayload(payload, 'gemini')).toBe(false);
   });
 });

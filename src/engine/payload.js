@@ -102,43 +102,40 @@ export function createSystemPrompt(character) {
   return character.system;
 }
 
-export function buildPayload(character, messages, provider = "gemini") {
-  if (provider !== "gemini") {
+export function buildPayload(character, messages, provider = "openrouter") {
+  if (provider !== "openrouter") {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const history = messages.map((msg) => ({
-    role: msg.role === "assistant" ? "model" : "user",
-    parts: [{ text: msg.content }],
-  }));
-
   return {
-    systemInstruction: createSystemPrompt(character),
-    generationConfig: {
-      temperature: character.temperature,
-      maxOutputTokens: 150,
-    },
-    history,
+    messages: [
+      {
+        role: "system",
+        content: createSystemPrompt(character),
+      },
+      ...messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+    ],
+    temperature: character.temperature,
+    max_tokens: 150,
   };
 }
 
-export function isValidPayload(payload, provider = "gemini") {
-  if (provider !== "gemini") {
+export function isValidPayload(payload, provider = "openrouter") {
+  if (provider !== "openrouter") {
     return false;
   }
 
-  if (typeof payload?.systemInstruction !== "string") return false;
-  if (!payload?.generationConfig || typeof payload.generationConfig !== "object") return false;
-  if (!Array.isArray(payload?.history)) return false;
+  if (typeof payload?.temperature !== "number") return false;
+  if (typeof payload?.max_tokens !== "number") return false;
+  if (!Array.isArray(payload?.messages)) return false;
 
-  return payload.history.every((entry) => {
-    const hasValidRole = entry?.role === "user" || entry?.role === "model";
-    const parts = entry?.parts;
+  return payload.messages.every((entry) => {
+    const hasValidRole =
+      entry?.role === "system" || entry?.role === "user" || entry?.role === "assistant";
 
-    return (
-      hasValidRole &&
-      Array.isArray(parts) &&
-      parts.every((part) => typeof part?.text === "string")
-    );
+    return hasValidRole && typeof entry?.content === "string";
   });
 }

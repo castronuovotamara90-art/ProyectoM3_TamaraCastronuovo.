@@ -2,45 +2,61 @@ import { describe, it, expect } from 'vitest';
 import { extractUsage, normalizeAIResponse } from './normalizer.js';
 
 describe('normalizeAIResponse', () => {
-  it('normaliza la respuesta de Gemini', () => {
+  it('normaliza la respuesta de OpenRouter', () => {
     const raw = {
-      candidates: [{ content: { parts: [{ text: 'Hola' }] }, finishReason: 'STOP' }],
+      choices: [{ message: { content: 'Hola' }, finish_reason: 'stop' }],
     };
 
-    expect(normalizeAIResponse(raw, 'gemini')).toEqual({ text: 'Hola', truncated: false });
+    expect(normalizeAIResponse(raw, 'openrouter')).toEqual({ text: 'Hola', truncated: false });
   });
 
-  it('marca truncado cuando Gemini devuelve MAX_TOKENS', () => {
+  it('marca truncado cuando OpenRouter devuelve length', () => {
     const raw = {
-      candidates: [{ content: { parts: [{ text: 'Hola' }] }, finishReason: 'MAX_TOKENS' }],
+      choices: [{ message: { content: 'Hola' }, finish_reason: 'length' }],
     };
 
-    expect(normalizeAIResponse(raw, 'gemini')).toEqual({ text: 'Hola', truncated: true });
+    expect(normalizeAIResponse(raw, 'openrouter')).toEqual({ text: 'Hola', truncated: true });
+  });
+
+  it('normaliza content en formato array', () => {
+    const raw = {
+      choices: [{ message: { content: [{ text: 'Hola' }, { text: ' Homer' }] }, finish_reason: 'stop' }],
+    };
+
+    expect(normalizeAIResponse(raw, 'openrouter')).toEqual({ text: 'Hola Homer', truncated: false });
+  });
+
+  it('normaliza fallback choice.text', () => {
+    const raw = {
+      choices: [{ text: 'Hola desde fallback', finish_reason: 'stop' }],
+    };
+
+    expect(normalizeAIResponse(raw, 'openrouter')).toEqual({ text: 'Hola desde fallback', truncated: false });
   });
 
   it('devuelve texto vacio con provider no soportado', () => {
     const raw = {
-      candidates: [{ content: { parts: [{ text: 'Hola' }] }, finishReason: 'STOP' }],
+      choices: [{ message: { content: 'Hola' }, finish_reason: 'stop' }],
     };
 
-    expect(normalizeAIResponse(raw, 'openrouter')).toEqual({ text: '', truncated: false });
+    expect(normalizeAIResponse(raw, 'gemini')).toEqual({ text: '', truncated: false });
   });
 });
 
 describe('extractUsage', () => {
-  it('extrae usage de Gemini', () => {
+  it('extrae usage de OpenRouter', () => {
     const raw = {
-      usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 3 },
+      usage: { prompt_tokens: 7, completion_tokens: 3 },
     };
 
-    expect(extractUsage(raw, 'gemini')).toEqual({ inputTokens: 7, outputTokens: 3 });
+    expect(extractUsage(raw, 'openrouter')).toEqual({ inputTokens: 7, outputTokens: 3 });
   });
 
   it('devuelve usage en cero con provider no soportado', () => {
     const raw = {
-      usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 3 },
+      usage: { prompt_tokens: 7, completion_tokens: 3 },
     };
 
-    expect(extractUsage(raw, 'openrouter')).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(extractUsage(raw, 'gemini')).toEqual({ inputTokens: 0, outputTokens: 0 });
   });
 });

@@ -1,6 +1,17 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildPayload, getCharacter, isValidPayload } from "../src/engine/payload.js";
+import { fetchJson } from "../src/engine/fetchjson.js";
 import { extractUsage, normalizeAIResponse } from "../src/engine/normalizer.js";
+import path from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+loadFirstExistingEnv([
+  path.join(__dirname, "..", ".env"),
+  path.join(__dirname, "..", "src", ".env"),
+]);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -10,10 +21,11 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!getGeminiApiKey()) {
+  if (!getOpenRouterApiKey()) {
     return sendJson(res, 500, {
       error: "MISSING_API_KEY",
-      message: "Set GEMINI_API_KEY in .env",
+      message:
+        "Set OPENROUTER_API_KEY in .env (project root). If your file is in src/.env, move it to root or configure Vercel env vars.",
     });
   }
 
@@ -31,7 +43,7 @@ export default async function handler(req, res) {
     }
 
     const character = getCharacter(characterId);
-    const providerResult = await requestGemini(character, message, history);
+    const providerResult = await requestOpenRouter(character, message, history);
 
     if (!providerResult.text) {
       return sendJson(res, 502, {
@@ -51,12 +63,22 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
-    console.error("Error calling Gemini:", error);
+    console.error("Error calling OpenRouter:", error);
+
+    if (isUnavailableFreeModelError(error)) {
+      return sendJson(res, 502, {
+        error: "MODEL_UNAVAILABLE",
+        message:
+          "The configured OpenRouter model is no longer available in free tier. Set OPENROUTER_MODEL to an available model or use OPENROUTER_MODEL=openrouter/auto.",
+      });
+    }
 
     if (error?.status === 429) {
       return sendJson(res, 429, {
         error: "AI_QUOTA_EXCEEDED",
-        message: "AI provider quota exceeded. Check billing/quota and retry later.",
+        message:
+          error?.message ||
+          "AI provider quota exceeded. Retry later or choose another free model.",
       });
     }
 
@@ -76,39 +98,40 @@ export default async function handler(req, res) {
   }
 }
 
-async function requestGemini(character, message, history) {
-  const apiKey = getGeminiApiKey();
+async function requestOpenRouter(character, message, history) {
+  const apiKey = getOpenRouterApiKey();
   if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY");
+    throw new Error("Missing OPENROUTER_API_KEY");
   }
 
-  const payload = buildPayload(character, history, "gemini");
+  const payload = buildPayload(character, history, "openrouter");
 
-  if (!isValidPayload(payload, "gemini")) {
+  if (!isValidPayload(payload, "openrouter")) {
     throw new Error("Payload validation failed");
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: getGeminiModel(),
-    systemInstruction: payload.systemInstruction,
-    generationConfig: payload.generationConfig,
+  const response = await fetchJson("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: getOpenRouterModel(),
+      messages: [...payload.messages, { role: "user", content: message }],
+      temperature: payload.temperature,
+      max_tokens: payload.max_tokens,
+    }),
+    timeoutMs: 30000,
   });
-
-  const chat = model.startChat({
-    history: payload.history,
-  });
-
-  const result = await chat.sendMessage(message);
-  const response = await result.response;
-  const normalized = normalizeAIResponse(response, "gemini");
-  const usage = extractUsage(response, "gemini");
+  const normalized = normalizeAIResponse(response, "openrouter");
+  const usage = extractUsage(response, "openrouter");
 
   return {
     text: normalized.text,
     truncated: normalized.truncated,
     usage,
-    model: getGeminiModel(),
+    model: getOpenRouterModel(),
   };
 }
 
@@ -134,12 +157,45 @@ function sanitizeHistory(history) {
     .filter((msg) => msg.content);
 }
 
-function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY;
+function getOpenRouterApiKey() {
+  return process.env.OPENROUTER_API_KEY;
 }
 
-function getGeminiModel() {
-  return process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+function getOpenRouterModel() {
+  return process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+}
+
+function isUnavailableFreeModelError(error) {
+  const text = String(error?.message || "").toLowerCase();
+  return text.includes("unavailable for free") || text.includes("paid version is available");
+}
+
+function loadDotEnv(filePath) {
+  if (!existsSync(filePath)) return;
+
+  const lines = readFileSync(filePath, "utf-8").split(/\r?\n/);
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) return;
+
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+
+    if (!key || process.env[key]) return;
+    process.env[key] = value;
+  });
+}
+
+function loadFirstExistingEnv(candidates) {
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    loadDotEnv(candidate);
+    return;
+  }
 }
 
 function sendJson(res, statusCode, data) {

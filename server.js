@@ -4,8 +4,8 @@ import { readFile, stat } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildPayload, getCharacter, isValidPayload } from "./src/engine/payload.js";
+import { fetchJson } from "./src/engine/fetchjson.js";
 import { extractUsage, normalizeAIResponse } from "./src/engine/normalizer.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,8 +18,8 @@ const loadedEnvPath = loadFirstExistingEnv([
 ]);
 
 const PORT = Number(process.env.PORT || 8095);
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -78,10 +78,10 @@ async function handleChatRequest(req, res) {
     return;
   }
 
-  if (!GEMINI_API_KEY) {
+  if (!OPENROUTER_API_KEY) {
     sendJson(res, 500, {
       error: "MISSING_API_KEY",
-      message: "Missing provider configuration. Set GEMINI_API_KEY in .env and restart the server.",
+      message: "Missing provider configuration. Set OPENROUTER_API_KEY in .env and restart the server.",
     });
     return;
   }
@@ -100,12 +100,12 @@ async function handleChatRequest(req, res) {
   }
 
   const character = getCharacter(characterId);
-  const payload = buildPayload(character, history, "gemini");
+  const payload = buildPayload(character, history, "openrouter");
 
-  if (!isValidPayload(payload, "gemini")) {
+  if (!isValidPayload(payload, "openrouter")) {
     sendJson(res, 400, {
       error: "INVALID_PAYLOAD",
-      message: "Payload validation failed for provider: gemini",
+      message: "Payload validation failed for provider: openrouter",
     });
     return;
   }
@@ -113,14 +113,23 @@ async function handleChatRequest(req, res) {
   let providerResult;
 
   try {
-    providerResult = await requestGemini(payload, message);
+    providerResult = await requestOpenRouter(payload, message);
   } catch (error) {
+    if (isUnavailableFreeModelError(error)) {
+      sendJson(res, 502, {
+        error: "MODEL_UNAVAILABLE",
+        message:
+          "The configured OpenRouter model is no longer available in free tier. Set OPENROUTER_MODEL to an available model or use OPENROUTER_MODEL=openrouter/auto.",
+      });
+      return;
+    }
+
     if (error?.status === 429) {
       sendJson(res, 429, {
         error: "AI_QUOTA_EXCEEDED",
         message:
           error?.message ??
-          "AI provider quota exceeded. Check billing/quota and retry later.",
+          "AI provider quota exceeded. Retry later or choose another free model.",
       });
       return;
     }
@@ -144,8 +153,8 @@ async function handleChatRequest(req, res) {
     return;
   }
 
-  const normalized = normalizeAIResponse(providerResult.raw, "gemini");
-  const usage = extractUsage(providerResult.raw, "gemini");
+  const normalized = normalizeAIResponse(providerResult.raw, "openrouter");
+  const usage = extractUsage(providerResult.raw, "openrouter");
 
   if (!normalized.text) {
     sendJson(res, 502, {
@@ -255,6 +264,11 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+function isUnavailableFreeModelError(error) {
+  const text = String(error?.message || "").toLowerCase();
+  return text.includes("unavailable for free") || text.includes("paid version is available");
+}
+
 function loadDotEnv(filePath) {
   if (!existsSync(filePath)) return;
 
@@ -285,20 +299,21 @@ function loadFirstExistingEnv(candidates) {
   return null;
 }
 
-async function requestGemini(payload, message) {
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: payload.systemInstruction,
-    generationConfig: payload.generationConfig,
+async function requestOpenRouter(payload, message) {
+  const raw = await fetchJson("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [...payload.messages, { role: "user", content: message }],
+      temperature: payload.temperature,
+      max_tokens: payload.max_tokens,
+    }),
+    timeoutMs: 30000,
   });
 
-  const chat = model.startChat({
-    history: payload.history,
-  });
-
-  const result = await chat.sendMessage(message);
-  const raw = await result.response;
-
-  return { raw, model: GEMINI_MODEL };
+  return { raw, model: OPENROUTER_MODEL };
 }
