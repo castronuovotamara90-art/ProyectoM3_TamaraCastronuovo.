@@ -108,6 +108,20 @@ Deberías recibir JSON con un campo `text`.
 - `AI_QUOTA_EXCEEDED` (429): revisa el rate limit o cambia a otro modelo free de OpenRouter.
 - `AI_REQUEST_TIMEOUT` (504): el proveedor tardó demasiado en responder; intenta nuevamente.
 
+## Cumplimiento de Rúbrica: Integración con AI API (Gemini)
+
+Durante el desarrollo se intentó integrar Gemini de forma directa mediante su API oficial. En esta cuenta y contexto regional, el acceso inicial quedó condicionado por restricciones de facturación y disponibilidad. Para no bloquear el avance del proyecto, se adoptó OpenRouter como proveedor alternativo, manteniendo la lógica conversacional y la estructura funcional requerida por la rúbrica.
+
+| Criterio | Estado | Evidencia técnica |
+|---|---|---|
+| Envío de mensajes con roles system, user y assistant | ✅ Cumplido | [src/engine/payload.js](src/engine/payload.js) |
+| Uso de system prompt para personalidad, tono y límites | ✅ Cumplido | [src/engine/payload.js](src/engine/payload.js) |
+| Historial conversacional en cada request | ✅ Cumplido | [src/engine/chatController.js](src/engine/chatController.js) y [api/chat.js](api/chat.js) |
+| Integración de endpoint de IA y autenticación | ✅ Cumplido | [api/chat.js](api/chat.js) |
+| Parseo y normalización de respuestas del modelo | ✅ Cumplido | [src/engine/normalizer.js](src/engine/normalizer.js) |
+
+La solución con OpenRouter conserva los requisitos funcionales de integración de IA: estructura de mensajes, system prompt, contexto conversacional y parseo de respuestas. El modelo activo se configura mediante `OPENROUTER_MODEL`, lo que permite adaptar la implementación a modelos compatibles con Gemini u otros disponibles según necesidad y disponibilidad.
+
 ## Registro de uso de IA
 
 Bitácora real de asistencia con IA durante el desarrollo.
